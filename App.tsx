@@ -15,7 +15,7 @@ declare global {
   }
 }
 
-const theme = {
+export const theme = {
   ...DefaultTheme,
   spacing: {
     s: 4,

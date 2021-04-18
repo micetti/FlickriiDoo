@@ -1,27 +1,24 @@
 import React, {useEffect, useState} from 'react';
-import {Alert, FlatList, Keyboard, Text, View} from 'react-native';
+import {
+  ActivityIndicator,
+  StyleSheet,
+  FlatList,
+  Keyboard,
+  Text,
+  View,
+} from 'react-native';
 import {Appbar, Button, Searchbar, useTheme} from 'react-native-paper';
-import axios from 'axios';
-import {ImageSearchData, ImageSearchInfo, ImageSearchPhoto} from './ApiTypes';
+import {ImageSearchInfo, ImageSearchPhoto} from './ApiTypes';
 import {ImageTile} from './ImageTile';
-import reactotron from 'reactotron-react-native';
-
-const FLICKR_URL = 'https://api.flickr.com/services/';
-const searchRequest = async (text: string) => {
-  try {
-    const response = await axios.get(
-      `${FLICKR_URL}rest/?method=flickr.photos.search&api_key=37ad288835e4c64fc0cb8af3f3a1a65d&format=json&nojsoncallback=1&safe_search=1&text=${text}`,
-    );
-    return response.data as ImageSearchData;
-  } catch (error) {
-    reactotron.log && reactotron.log('Error');
-  }
-};
+import {PreviousSearches} from './PreviousSearches';
+import {theme} from '../App';
+import {fetchNextPage, searchForText} from './ApiSearchClient';
 
 export const HomeScreen = () => {
   const paperTheme = useTheme();
   const [searchText, setSearchText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [searchResultInfo, setSearchResultInfo] = useState<
     ImageSearchInfo | undefined
   >(undefined);
@@ -29,20 +26,25 @@ export const HomeScreen = () => {
     ImageSearchPhoto[]
   >([]);
 
-  const search = () => {
+  const search = (text: string) => {
     Keyboard.dismiss();
-    setIsLoading(true);
-    searchRequest(searchText)
-      .then(data => {
-        setSearchResultInfo(data?.photos);
-        setSearchResultPhotos(data?.photos.photo ?? []);
-      })
-      .catch(error => {
-        reactotron.log('error');
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
+    searchForText(
+      text,
+      setIsLoading,
+      setSearchResultInfo,
+      setSearchResultPhotos,
+    );
+  };
+
+  const fetchNext = (text: string) => {
+    const page = searchResultInfo ? searchResultInfo.page + 1 : 1;
+    fetchNextPage(
+      text,
+      page,
+      setIsLoadingMore,
+      setSearchResultInfo,
+      setSearchResultPhotos,
+    );
   };
 
   useEffect(() => {
@@ -64,23 +66,24 @@ export const HomeScreen = () => {
             style={{margin: 8}}
             value={searchText}
             onChangeText={text => {
-              setSearchText(text.trim());
+              setSearchText(text);
             }}
-            onSubmitEditing={search}
+            onSubmitEditing={event => search(event.nativeEvent.text)}
           />
         </View>
-        <View
-          style={{
-            justifyContent: 'center',
-            paddingRight: paperTheme.spacing.m,
-          }}>
-          <Button loading={isLoading} onPress={search} mode="contained">
+        <View style={styles.buttonContainer}>
+          <Button
+            loading={isLoading}
+            onPress={() => search(searchText)}
+            mode="contained">
             {'Search'}
           </Button>
         </View>
       </View>
       {searchResultInfo?.total && (
-        <Text>{`found ${searchResultInfo?.total} results matching your search`}</Text>
+        <Text style={styles.numberOfResults}>
+          {`found ${searchResultInfo?.total} results matching your search`}
+        </Text>
       )}
       <FlatList
         showsVerticalScrollIndicator={false}
@@ -88,13 +91,33 @@ export const HomeScreen = () => {
         keyExtractor={item => item.id}
         data={searchResultPhotos}
         renderItem={({item}) => <ImageTile info={item} />}
-        // Performance settings
-        // removeClippedSubviews={true} // Unmount components when outside of window
+        ListEmptyComponent={() => (
+          <PreviousSearches
+            onPress={(text: string) => {
+              setSearchText(text);
+              search(text);
+            }}
+          />
+        )}
+        onEndReached={() => fetchNext(searchText)}
         windowSize={3}
-        initialNumToRender={3} // Reduce initial render amount
-        // maxToRenderPerBatch={1} // Reduce number in each render batch
-        // updateCellsBatchingPeriod={100} // Increase time between renders
+        initialNumToRender={3}
       />
+      {isLoadingMore && (
+        <ActivityIndicator style={styles.activityIndicator} size="large" />
+      )}
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  numberOfResults: {
+    paddingLeft: theme.spacing.m,
+    paddingBottom: theme.spacing.m,
+  },
+  activityIndicator: {paddingBottom: theme.spacing.xl},
+  buttonContainer: {
+    justifyContent: 'center',
+    paddingRight: theme.spacing.m,
+  },
+});

@@ -1,0 +1,9 @@
+{
+    "extends": "./tsconfig",
+    "compilerOptions": {
+      "jsx": "react",
+      "module": "commonjs",
+      "target": "ES5",
+      "downlevelIteration": true
+    }
+  }
